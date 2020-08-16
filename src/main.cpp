@@ -37,7 +37,7 @@ const int daylightOffset_sec = 3600;
 struct tm timeinfo;
 
 //Alarm Settings
-AlarmState alarmState(00, 42);
+AlarmState alarmState(9, 00);
 AlarmId brightness_id;
 AlarmId wakeup_id;
 
@@ -102,8 +102,7 @@ void handleRoot(HTTPRequest * req, HTTPResponse * resp) {
   resp->println("<html>");
   resp->println("<head><title>Alarm Details</title></head>");
   resp->println("<body>");
-  resp->printf("<h1>Current Alarm set for: %d %d \n</h1>", alarmState.AlarmHour(), alarmState.AlarmMinute());
-  resp->println("<p>test</p>");
+  resp->printf("<h1>Current Alarm set for: %d:%d \n</h1>", alarmState.AlarmHour(), alarmState.AlarmMinute());
   resp->println("</body>");
   resp->println("</html>");
 }
@@ -145,7 +144,6 @@ void ResetAlarm() {
   Alarm.free(wakeup_id);
 
   wakeup_id = Alarm.alarmRepeat(alarmState.AlarmHour(), alarmState.AlarmMinute(), 0, BeginSunrise);
-  AlarmDisplay();
 }
 
 void warmUpLights()
@@ -195,7 +193,6 @@ void GetTimeViaWifi()
 }
 
 void handleAlarmSet(HTTPRequest * req, HTTPResponse * resp) {
-  Serial.println("Processing Alarm Set...");
   DynamicJsonDocument doc(128);
   byte buffer[128];
   req->readBytes(buffer, 128);
