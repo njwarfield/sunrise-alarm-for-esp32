@@ -131,6 +131,14 @@ void IncreaseBrightness()
 
 void BeginSunrise()
 {
+  brightness = 0;
+  temperature_counter = 0;
+  temperature_index = 0;
+
+  FastLED.setBrightness(brightness);
+  CRGB color = warmth[temperature_index];
+  fill_solid(leds, NUM_LEDS, color);
+
   Serial.println("Sunrise active");
   brightness_id = Alarm.timerRepeat(30, IncreaseBrightness);
   begin_sunrise = true;
@@ -206,9 +214,10 @@ void handleAlarmSet(HTTPRequest * req, HTTPResponse * resp) {
   int h =doc["h"];
   int m = doc["m"];
   alarmState.SetAlarm(h, m);
-  Alarm.free(brightness_id);
-  Alarm.free(wakeup_id);
-  wakeup_id = 0;
+  if(wakeup_id != 0) {
+    Alarm.free(wakeup_id);
+    wakeup_id = 0;
+  }
   wakeup_id = Alarm.alarmRepeat(alarmState.AlarmHour(), alarmState.AlarmMinute(), 0, BeginSunrise);
 
   resp->setStatusCode(200);
@@ -216,10 +225,28 @@ void handleAlarmSet(HTTPRequest * req, HTTPResponse * resp) {
   resp->printf("Alarm set for: %d:%d \n", alarmState.AlarmHour(), alarmState.AlarmMinute());
 }
 
+void handleAlarmOff(HTTPRequest * req, HTTPResponse * resp) {
+  Alarm.free(brightness_id);
+  brightness_id = 0;
+  Alarm.free(wakeup_id);
+  wakeup_id = 0;
+
+  CRGB color = CRGB::Black;
+  fill_solid(leds, NUM_LEDS, color);
+  brightness_update = false;
+  FastLED.show();
+  FastLED.delay(1);
+
+  resp->setStatusCode(200);
+  resp->setStatusText("Alarm Off");
+  resp->println("Alarm turned off.");
+}
+
 void serverTask(void *params) {
   ResourceNode * nodeRoot = new ResourceNode("/", "GET", &handleRoot);
-  ResourceNode * alarmLightDisable = new ResourceNode("/off", "GET", &handleRoot);
   httpServer.registerNode(nodeRoot);
+  ResourceNode * alarmOff = new ResourceNode("/off", "GET", &handleAlarmOff);
+  httpServer.registerNode(alarmOff);
   ResourceNode * alarmSet = new ResourceNode("/set-alarm", "POST", &handleAlarmSet);
   httpServer.registerNode(alarmSet);
   httpServer.start();
@@ -240,9 +267,6 @@ void setup()
 
   wakeup_id = Alarm.alarmRepeat(alarmState.AlarmHour(), alarmState.AlarmMinute(), 0, BeginSunrise);
   FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  FastLED.setBrightness(brightness);
-  CRGB color = warmth[temperature_index];
-  fill_solid(leds, NUM_LEDS, color);
 
   xTaskCreatePinnedToCore(serverTask, "http", 6144, NULL, 1, NULL, CONFIG_ARDUINO_RUNNING_CORE);
 }
