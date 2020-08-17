@@ -91,18 +91,15 @@ void AlarmDisplay()
   Serial.println();
 }
 
-void showTime()
-{
-  digitalClockDisplay();
-}
-
 void handleRoot(HTTPRequest * req, HTTPResponse * resp) {
   resp -> setHeader("Content-Type", "text/html");
   resp->println("<!DOCTYPE html");
   resp->println("<html>");
   resp->println("<head><title>Alarm Details</title></head>");
   resp->println("<body>");
-  resp->printf("<h1>Current Alarm set for: %d:%d \n</h1>", alarmState.AlarmHour(), alarmState.AlarmMinute());
+  resp->println("<h1>");
+  resp->printf("Current Alarm set for: %d:%d \n", alarmState.AlarmHour(), alarmState.AlarmMinute());
+  resp->println("</h1>");
   resp->println("</body>");
   resp->println("</html>");
 }
@@ -137,13 +134,6 @@ void BeginSunrise()
   Serial.println("Sunrise active");
   brightness_id = Alarm.timerRepeat(30, IncreaseBrightness);
   begin_sunrise = true;
-}
-
-void ResetAlarm() {
-  Alarm.free(brightness_id);
-  Alarm.free(wakeup_id);
-
-  wakeup_id = Alarm.alarmRepeat(alarmState.AlarmHour(), alarmState.AlarmMinute(), 0, BeginSunrise);
 }
 
 void warmUpLights()
@@ -202,8 +192,6 @@ void handleAlarmSet(HTTPRequest * req, HTTPResponse * resp) {
     resp->setStatusCode(413);
     resp->setStatusText("Request entity too large");
     resp->println("413 Request entity too large");
-    // Clean up
-    delete[] buffer;
     return;
   }
 
@@ -212,26 +200,28 @@ void handleAlarmSet(HTTPRequest * req, HTTPResponse * resp) {
     resp->setStatusCode(500);
     resp->setStatusText("Error parsing JSON");
     resp->println("Error parsing JSON");
-    // Clean up
-    delete[] buffer;
     return;
   }
 
   int h =doc["h"];
   int m = doc["m"];
   alarmState.SetAlarm(h, m);
-  ResetAlarm();
+  Alarm.free(brightness_id);
+  Alarm.free(wakeup_id);
+  wakeup_id = 0;
+  wakeup_id = Alarm.alarmRepeat(alarmState.AlarmHour(), alarmState.AlarmMinute(), 0, BeginSunrise);
 
   resp->setStatusCode(200);
   resp->setStatusText("Alarm Set");
-  resp->println("Alarm Set");
+  resp->printf("Alarm set for: %d:%d \n", alarmState.AlarmHour(), alarmState.AlarmMinute());
 }
 
 void serverTask(void *params) {
   ResourceNode * nodeRoot = new ResourceNode("/", "GET", &handleRoot);
+  ResourceNode * alarmLightDisable = new ResourceNode("/off", "GET", &handleRoot);
   httpServer.registerNode(nodeRoot);
-  ResourceNode * alarmReset = new ResourceNode("/set-alarm", "POST", &handleAlarmSet);
-  httpServer.registerNode(alarmReset);
+  ResourceNode * alarmSet = new ResourceNode("/set-alarm", "POST", &handleAlarmSet);
+  httpServer.registerNode(alarmSet);
   httpServer.start();
 
   if(httpServer.isRunning()) {
@@ -248,8 +238,7 @@ void setup()
   while (!Serial);
   GetTimeViaWifi();
 
-  Alarm.timerRepeat(60, showTime);
-  ResetAlarm();
+  wakeup_id = Alarm.alarmRepeat(alarmState.AlarmHour(), alarmState.AlarmMinute(), 0, BeginSunrise);
   FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(brightness);
   CRGB color = warmth[temperature_index];
