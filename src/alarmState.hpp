@@ -1,12 +1,28 @@
+#include <tuple>
+#include <map>
+
 #define AlarmState_H
+using namespace std;
 
 class AlarmState {
     private:
-        int alarm_hour;
-        int alarm_minute;
+        std::map<int, std::tuple<int, int>> map;
+        std::map<int, std::tuple<int, int>>::iterator it;
     public:
-        AlarmState(int hour, int minute);
-        int AlarmHour() {return alarm_hour;}
-        int AlarmMinute() {return alarm_minute;}
-        void SetAlarm(int hour, int minute);
+        AlarmState();
+        bool TodayHasAlarm(int day) {
+            tuple<int, int> alarm = GetAlarmByDay(day);
+            if(get<0>(alarm) > 0 || get<1>(alarm) > 0) return true;
+            return false;
+        }
+        int AlarmHour(int day) { 
+            tuple<int, int> alarm = GetAlarmByDay(day);
+            return get<0>(alarm);
+         }
+        int AlarmMinute(int day) {
+            tuple<int, int> alarm = GetAlarmByDay(day);
+            return get<1>(alarm);
+        }
+        void SetAlarm(int day, int hour, int minute);
+        tuple<int, int> GetAlarmByDay(int day);
 };
