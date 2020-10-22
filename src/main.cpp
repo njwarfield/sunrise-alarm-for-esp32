@@ -30,7 +30,7 @@ const char password[] = IOT_WIFI_Password;
 
 //NTP Time Settings
 const char ntpServer[] = NTP_URL;
-const long gmtOffset_sec = -21600;
+const long gmtOffset_sec = TZ_OFFSET;
 
 //DST Offset value is one hour (in seconds)
 const int daylightOffset_sec = 3600;

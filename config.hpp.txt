@@ -1,3 +1,4 @@
 #define SSID "wifi connection SSID"
 #define IOT_WIFI_Password "the password to the wifi connection"
+#define TZ_OFFSET "your timezone offset"
 #define NTP_URL "pool.ntp.org"
