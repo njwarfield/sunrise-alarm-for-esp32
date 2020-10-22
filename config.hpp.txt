@@ -1,0 +1,3 @@
+#define SSID "wifi connection SSID"
+#define IOT_WIFI_Password "the password to the wifi connection"
+#define NTP_URL "pool.ntp.org"
