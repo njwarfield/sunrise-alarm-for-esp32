@@ -1,6 +1,7 @@
 #include <ArduinoJson.h>
 #include <FastLED.h>
 #include <SPIFFS.h>
+#include <ESPFlash.h>
 #include <TimeAlarms.h>
 #include <TimeLib.h>
 #include <WiFi.h>
@@ -66,7 +67,6 @@ CRGB warmth[] = {
 //Webserver settings
 WiFiServer server(8181);
 HTTPServer httpServer = HTTPServer(80);
-SSLCert *cert;
 String header;
 
 void printDigits(int digits) {
@@ -81,13 +81,6 @@ void digitalClockDisplay() {
     Serial.print(alarmHour);
     printDigits(alarmMinute);
     printDigits(second());
-    Serial.println();
-}
-
-void AlarmDisplay() {
-    // digital clock display of the time
-    Serial.print(alarmHour);
-    printDigits(alarmMinute);
     Serial.println();
 }
 
@@ -201,30 +194,29 @@ void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
         return;
     }
 
+    //TODO: Same as AS constructor, refactor
     JsonArray array = doc.as<JsonArray>();
     for (JsonVariant value : array) {
         int d = value["d"];
         int h = value["h"];
         int m = value["m"];
         Serial.printf("%d %d %d", d, h, m);
-        //Update map
+        Serial.println();
         alarmState.SetAlarm(d, h, m);
-        //set alarm if new update is next alarm
-        if (d == weekday()) {
-            if (wakeup_id != 0) {
-                Alarm.free(wakeup_id);
-                wakeup_id = 0;
-            }
-            wakeup_id = Alarm.alarmRepeat(h, m, 0, BeginSunrise);
-        }
     }
-
+    
     resp->setStatusCode(200);
-    resp->setStatusText("Alarm Set");
-    resp->printf("Alarms set");
+    resp->setHeader("Content-type", "application/json");
+    resp->printStd(alarmState.serializeStateToJSON());
 }
 
-void handleAlarmOff(HTTPRequest *req, HTTPResponse *resp) {
+void enableAlarm() {
+    int tomorrow = isPM() ? 1 : 0;
+    tuple<int, int> alarm = alarmState.GetAlarmByDay(weekday() + tomorrow);
+    wakeup_id = Alarm.alarmRepeat(get<0>(alarm), get<1>(alarm), 0, BeginSunrise);
+}
+
+void disableAlarm() {
     Alarm.free(brightness_id);
     brightness_id = 0;
     Alarm.free(wakeup_id);
@@ -235,18 +227,35 @@ void handleAlarmOff(HTTPRequest *req, HTTPResponse *resp) {
     brightness_update = false;
     FastLED.show();
     FastLED.delay(1);
+}
 
-    resp->setStatusCode(200);
-    resp->setStatusText("Alarm Off");
+void handleAlarmToggle(HTTPRequest *req, HTTPResponse *resp) {
+
+    //TODO: Handle enable alarm for "today" when enabled before midnight
+    if(wakeup_id != 0) {
+        disableAlarm();
+        resp->setStatusCode(200);
+        resp->setStatusText("Alarm Off");
+    }
+    else
+    {
+        if(alarmState.TodayHasAlarm(weekday())) {
+            enableAlarm();
+            resp->setStatusCode(200);
+            resp->setStatusText("Alarm On");
+        }
+        else {
+            resp->setStatusCode(404);
+            resp->setStatusText("No alarm found for today");
+        }
+    }
     resp->println("Alarm turned off.");
-
-    //Check/set next alarm
 }
 
 void serverTask(void *params) {
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
     httpServer.registerNode(nodeRoot);
-    ResourceNode *alarmOff = new ResourceNode("/off", "GET", &handleAlarmOff);
+    ResourceNode *alarmOff = new ResourceNode("/toggle", "PUT", &handleAlarmToggle);
     httpServer.registerNode(alarmOff);
     ResourceNode *alarmSet = new ResourceNode("/set-alarm", "POST", &handleAlarmSet);
     httpServer.registerNode(alarmSet);
@@ -265,6 +274,12 @@ void setup() {
     while (!Serial);
     GetTimeViaWifi();
     //load alarm state from memory
+    string alarms;
+    ESPFlash<string> currentAlarms("/alarmState");
+    alarms = currentAlarms.get();
+    alarms.length() > 0 ?  
+        alarmState = AlarmState(alarms) :
+        alarmState = AlarmState();
 
     int day = weekday();
     //set today's alarm if it exists

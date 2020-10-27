@@ -1,5 +1,6 @@
 #include <tuple>
 #include <map>
+#include <string>
 
 #define AlarmState_H
 using namespace std;
@@ -10,6 +11,8 @@ class AlarmState {
         std::map<int, std::tuple<int, int>>::iterator it;
     public:
         AlarmState();
+        AlarmState(string json);
+        string serializeStateToJSON();
         bool TodayHasAlarm(int day) {
             tuple<int, int> alarm = GetAlarmByDay(day);
             if(get<0>(alarm) > 0 || get<1>(alarm) > 0) return true;
