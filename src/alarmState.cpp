@@ -4,10 +4,10 @@
 AlarmState::AlarmState() {
 }
 
-AlarmState::AlarmState(string json) {
+AlarmState::AlarmState(String json) {
     DynamicJsonDocument doc(256);
     deserializeJson(doc, json);
-    for (size_t i = 0; i < doc.size(); i++)
+    for (size_t i = 0; i < ; i++)
     {
         JsonObject alarmTime = doc[i];
         int day = alarmTime["d"];
@@ -34,18 +34,18 @@ std::tuple<int, int> AlarmState::GetAlarmByDay(int day) {
     return std::make_tuple(0, 0);
 };
 
-string AlarmState::serializeStateToJSON() {
-    string alarmJSON;
+String AlarmState::serializeStateToJSON() {
+    String alarmJSON;
     if (map.size() > 0) {
         DynamicJsonDocument doc(256);
-        for (size_t i = 0; i < map.size(); i++) {
+        for (size_t i = 0; i < map.size()-1; i++) {
             JsonObject alarm = doc.createNestedObject();
             tuple<int, int> alarmTime = GetAlarmByDay(i);
             alarm["d"] = i;
             alarm["h"] = get<0>(alarmTime);
             alarm["m"] = get<1>(alarmTime);
+            serializeJson(doc, alarmJSON);
         }
-        serializeJson(doc, alarmJSON);
     }
     return alarmJSON;
 }

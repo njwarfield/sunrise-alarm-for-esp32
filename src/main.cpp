@@ -1,7 +1,6 @@
 #include <ArduinoJson.h>
 #include <FastLED.h>
 #include <SPIFFS.h>
-#include <ESPFlash.h>
 #include <TimeAlarms.h>
 #include <TimeLib.h>
 #include <WiFi.h>
@@ -42,9 +41,6 @@ AlarmId brightness_id;
 AlarmId wakeup_id;
 AlarmState alarmState;
 
-int alarmHour = 0;
-int alarmMinute = 0;
-
 bool begin_sunrise = false;
 bool turn_off = false;
 
@@ -76,25 +72,12 @@ void printDigits(int digits) {
     Serial.print(digits);
 }
 
-void digitalClockDisplay() {
+void digitalClockDisplay(int hour, int minute) {
     // digital clock display of the time
-    Serial.print(alarmHour);
-    printDigits(alarmMinute);
+    Serial.print(hour);
+    printDigits(minute);
     printDigits(second());
     Serial.println();
-}
-
-void handleRoot(HTTPRequest *req, HTTPResponse *resp) {
-    resp->setHeader("Content-Type", "text/html");
-    resp->println("<!DOCTYPE html");
-    resp->println("<html>");
-    resp->println("<head><title>Alarm Details</title></head>");
-    resp->println("<body>");
-    resp->println("<h1>");
-    resp->printf("Current Alarm set for: %d:%d \n", alarmHour, alarmMinute);
-    resp->println("</h1>");
-    resp->println("</body>");
-    resp->println("</html>");
 }
 
 void IncreaseBrightness() {
@@ -170,7 +153,15 @@ void GetTimeViaWifi() {
     time_t newTime = mktime(&timeinfo);
     setTime(newTime);
     adjustTime(gmtOffset_sec + daylightOffset_sec);
-    digitalClockDisplay();
+}
+
+void handleRoot(HTTPRequest *req, HTTPResponse *resp) {
+    //TODO: print alarm is enabled state
+    //TODO: print alarm details
+    resp->setStatusCode(200);
+    resp->setHeader("Content-type", "application/json");
+    Serial.println(alarmState.serializeStateToJSON());
+    resp->println(alarmState.serializeStateToJSON());
 }
 
 void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
@@ -204,10 +195,13 @@ void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
         Serial.println();
         alarmState.SetAlarm(d, h, m);
     }
-    
+    String alarms = alarmState.serializeStateToJSON();
+
+    //Save to SPIFFS
+
     resp->setStatusCode(200);
     resp->setHeader("Content-type", "application/json");
-    resp->printStd(alarmState.serializeStateToJSON());
+    resp->println(alarms);
 }
 
 void enableAlarm() {
@@ -230,21 +224,17 @@ void disableAlarm() {
 }
 
 void handleAlarmToggle(HTTPRequest *req, HTTPResponse *resp) {
-
     //TODO: Handle enable alarm for "today" when enabled before midnight
-    if(wakeup_id != 0) {
+    if (wakeup_id != 0) {
         disableAlarm();
         resp->setStatusCode(200);
         resp->setStatusText("Alarm Off");
-    }
-    else
-    {
-        if(alarmState.TodayHasAlarm(weekday())) {
+    } else {
+        if (alarmState.TodayHasAlarm(weekday())) {
             enableAlarm();
             resp->setStatusCode(200);
             resp->setStatusText("Alarm On");
-        }
-        else {
+        } else {
             resp->setStatusCode(404);
             resp->setStatusText("No alarm found for today");
         }
@@ -271,24 +261,26 @@ void serverTask(void *params) {
 
 void setup() {
     Serial.begin(115200);
+    if (!SPIFFS.begin(true)) {
+        Serial.println("Error mounting SPIFFS");
+    }
     while (!Serial);
     GetTimeViaWifi();
-    //load alarm state from memory
-    string alarms;
-    ESPFlash<string> currentAlarms("/alarmState");
-    alarms = currentAlarms.get();
-    alarms.length() > 0 ?  
-        alarmState = AlarmState(alarms) :
-        alarmState = AlarmState();
-
-    int day = weekday();
-    //set today's alarm if it exists
-    if (alarmState.TodayHasAlarm(day)) {
-        alarmHour = alarmState.AlarmHour(day);
-        alarmMinute = alarmState.AlarmMinute(day);
-        wakeup_id = Alarm.alarmRepeat(alarmHour, alarmMinute, 0, BeginSunrise);
+    String alarms = " ";
+    if(SPIFFS.exists("/alarmState.json")) {
+        File file = SPIFFS.open("/alarmState.json");
+        if (file && file.size()) {
+            Serial.println("Reading saved alarms...");
+            
+            while(file.available()) {
+                alarms += char(file.read());
+            }
+            file.close();
+        }
     }
-
+    SPIFFS.end();
+    alarmState = AlarmState(alarms);
+    
     FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
     xTaskCreatePinnedToCore(serverTask, "http", 6144, NULL, 1, NULL, CONFIG_ARDUINO_RUNNING_CORE);
 }
