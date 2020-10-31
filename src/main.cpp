@@ -72,10 +72,10 @@ void printDigits(int digits) {
     Serial.print(digits);
 }
 
-void digitalClockDisplay(int hour, int minute) {
+void digitalClockDisplay() {
     // digital clock display of the time
-    Serial.print(hour);
-    printDigits(minute);
+    Serial.print(hour());
+    printDigits(minute());
     printDigits(second());
     Serial.println();
 }
@@ -155,19 +155,32 @@ void GetTimeViaWifi() {
     adjustTime(gmtOffset_sec + daylightOffset_sec);
 }
 
+String getAlarmFromSPIFFS() {
+    String alarms = " ";
+    if (SPIFFS.exists(STATE_FILE)) {
+        File file = SPIFFS.open(STATE_FILE);
+        if (file && file.size()) {
+            while (file.available()) {
+                alarms += char(file.read());
+            }
+            file.close();
+        }
+    }
+    return alarms;
+}
+
 void handleRoot(HTTPRequest *req, HTTPResponse *resp) {
     //TODO: print alarm is enabled state
-    //TODO: print alarm details
     resp->setStatusCode(200);
     resp->setHeader("Content-type", "application/json");
-    Serial.println(alarmState.serializeStateToJSON());
     resp->println(alarmState.serializeStateToJSON());
 }
 
 void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
-    DynamicJsonDocument doc(128);
-    byte buffer[128];
-    req->readBytes(buffer, 128);
+    const size_t capacity = JSON_ARRAY_SIZE(7) + 7 * JSON_OBJECT_SIZE(3) + 30;
+    DynamicJsonDocument doc(capacity);
+    byte buffer[capacity];
+    req->readBytes(buffer, capacity);
 
     // If the request is still not read completely, we cannot process it.
     if (!req->requestComplete()) {
@@ -186,7 +199,7 @@ void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
     }
 
     //TODO: Same as AS constructor, refactor
-    JsonArray array = doc.as<JsonArray>();
+    JsonArray array = doc["alarms"].as<JsonArray>();
     for (JsonVariant value : array) {
         int d = value["d"];
         int h = value["h"];
@@ -198,23 +211,41 @@ void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
     String alarms = alarmState.serializeStateToJSON();
 
     //Save to SPIFFS
-
-    resp->setStatusCode(200);
-    resp->setHeader("Content-type", "application/json");
-    resp->println(alarms);
+    int bytes = 0;
+    File file = SPIFFS.open("/alarmState.json", "w");
+    if (file) {
+        bytes = file.print(alarms);
+        file.close();
+    }
+    if (bytes > 0) {
+        resp->setStatusCode(200);
+        resp->setHeader("Content-type", "application/json");
+        resp->println(alarms);
+    } else {
+        resp->setStatusCode(500);
+        resp->setStatusText("Unable to save alarms.");
+    }
 }
 
-void enableAlarm() {
-    int tomorrow = isPM() ? 1 : 0;
-    tuple<int, int> alarm = alarmState.GetAlarmByDay(weekday() + tomorrow);
+boolean tryEnableAlarm() {
+    Serial.println("Enable Alarm");
+    int alarmOffset = isPM() ? 1 : 0;
+    int nextAlarmDay = (weekday() + alarmOffset > 7) ? 1 : weekday() + alarmOffset;
+    tuple<int, int> alarm = alarmState.GetAlarmByDay(nextAlarmDay);
     wakeup_id = Alarm.alarmRepeat(get<0>(alarm), get<1>(alarm), 0, BeginSunrise);
+    if(wakeup_id != dtINVALID_ALARM_ID) {
+        Serial.printf("Alarm set, hour: %d - minute: %d", get<0>(alarm), get<1>(alarm));
+        return true;
+    }
+    return false;
 }
 
 void disableAlarm() {
+    Serial.println("Disabling Alarm");
     Alarm.free(brightness_id);
     brightness_id = 0;
     Alarm.free(wakeup_id);
-    wakeup_id = 0;
+    wakeup_id = dtINVALID_ALARM_ID;
 
     CRGB color = CRGB::Black;
     fill_solid(leds, NUM_LEDS, color);
@@ -224,29 +255,41 @@ void disableAlarm() {
 }
 
 void handleAlarmToggle(HTTPRequest *req, HTTPResponse *resp) {
-    //TODO: Handle enable alarm for "today" when enabled before midnight
-    if (wakeup_id != 0) {
+    if (!alarmState.enabled) {
+        if (!tryEnableAlarm()) {
+            resp->setStatusCode(500);
+            resp->setHeader("Content-Type", "text/html");
+            resp->setStatusText("Unable to set alarm");
+            return;
+        } else {
+            resp->setStatusCode(200);
+            resp->setHeader("Content-Type", "text/html");
+            resp->setStatusText("Alarm On");
+            alarmState.enabled = true;
+        }
+    } else {
         disableAlarm();
         resp->setStatusCode(200);
+        resp->setHeader("Content-Type", "text/html");
         resp->setStatusText("Alarm Off");
-    } else {
-        if (alarmState.TodayHasAlarm(weekday())) {
-            enableAlarm();
-            resp->setStatusCode(200);
-            resp->setStatusText("Alarm On");
-        } else {
-            resp->setStatusCode(404);
-            resp->setStatusText("No alarm found for today");
-        }
+        alarmState.enabled = false;
     }
-    resp->println("Alarm turned off.");
+    String alarms = alarmState.serializeStateToJSON();
+
+    //Save to SPIFFS
+    int bytes = 0;
+    File file = SPIFFS.open("/alarmState.json", "w");
+    if (file) {
+        bytes = file.print(alarms);
+        file.close();
+    }
 }
 
 void serverTask(void *params) {
     ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handleRoot);
     httpServer.registerNode(nodeRoot);
-    ResourceNode *alarmOff = new ResourceNode("/toggle", "PUT", &handleAlarmToggle);
-    httpServer.registerNode(alarmOff);
+    ResourceNode *alarmSwitch = new ResourceNode("/toggle", "GET", &handleAlarmToggle);
+    httpServer.registerNode(alarmSwitch);
     ResourceNode *alarmSet = new ResourceNode("/set-alarm", "POST", &handleAlarmSet);
     httpServer.registerNode(alarmSet);
     httpServer.start();
@@ -264,23 +307,18 @@ void setup() {
     if (!SPIFFS.begin(true)) {
         Serial.println("Error mounting SPIFFS");
     }
-    while (!Serial);
+    while (!Serial)
+        ;
     GetTimeViaWifi();
-    String alarms = " ";
-    if(SPIFFS.exists("/alarmState.json")) {
-        File file = SPIFFS.open("/alarmState.json");
-        if (file && file.size()) {
-            Serial.println("Reading saved alarms...");
-            
-            while(file.available()) {
-                alarms += char(file.read());
-            }
-            file.close();
-        }
-    }
-    SPIFFS.end();
+    digitalClockDisplay();
+    String alarms = getAlarmFromSPIFFS();
     alarmState = AlarmState(alarms);
-    
+    if(alarmState.enabled) {
+        tryEnableAlarm() ?
+            Serial.println("Alarm initialized.") :
+            Serial.println("Alarm intialization failed.");
+        
+    }
     FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
     xTaskCreatePinnedToCore(serverTask, "http", 6144, NULL, 1, NULL, CONFIG_ARDUINO_RUNNING_CORE);
 }

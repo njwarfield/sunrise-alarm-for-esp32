@@ -1,51 +1,61 @@
 #include <ArduinoJson.h>
+
 #include <alarmState.hpp>
 
 AlarmState::AlarmState() {
 }
 
 AlarmState::AlarmState(String json) {
-    DynamicJsonDocument doc(256);
+    const size_t capacity = JSON_ARRAY_SIZE(7) + JSON_OBJECT_SIZE(2) + 7*JSON_OBJECT_SIZE(3) + 30;
+    DynamicJsonDocument doc(capacity);
     deserializeJson(doc, json);
-    for (size_t i = 0; i < ; i++)
-    {
-        JsonObject alarmTime = doc[i];
-        int day = alarmTime["d"];
-        int hour = alarmTime["h"];
-        int minute = alarmTime["m"];
-        SetAlarm(day, hour, minute);
+    enabled = doc["enabled"];
+    for (JsonObject obj: doc["alarms"].as<JsonArray>()) {
+        int day = obj["d"];
+        int hour = obj["h"];
+        int minute = obj["m"];
+        if(day < 8 && hour < 24 && minute < 60) {
+            SetAlarm(day, hour, minute);
+        }
     }
 }
 
 void AlarmState::SetAlarm(int day, int hour, int minute) {
     it = map.find(day);
-    if (it != map.end()) {
+    if (it == map.end()) {
+        Serial.printf("No day %d adding new record", day);
+        Serial.println("");
         map.insert(std::make_pair(day, std::make_tuple(hour, minute)));
     } else {
+        Serial.printf("Editing existing day %d", day);
         it->second = std::make_tuple(hour, minute);
     }
 };
 
-std::tuple<int, int> AlarmState::GetAlarmByDay(int day) {
+tuple<int, int> AlarmState::GetAlarmByDay(int day) {
     it = map.find(day);
-    if (it != map.end()) {
-        return it->second;
+    if (it == map.end()) {
+        Serial.printf("Could not find alarm for day %d", day);
+        return std::make_tuple(0, 0);
     }
-    return std::make_tuple(0, 0);
+    return it->second;
 };
 
 String AlarmState::serializeStateToJSON() {
     String alarmJSON;
     if (map.size() > 0) {
-        DynamicJsonDocument doc(256);
-        for (size_t i = 0; i < map.size()-1; i++) {
-            JsonObject alarm = doc.createNestedObject();
-            tuple<int, int> alarmTime = GetAlarmByDay(i);
-            alarm["d"] = i;
+        const size_t capacity = JSON_ARRAY_SIZE(7) + JSON_OBJECT_SIZE(2) + 7*JSON_OBJECT_SIZE(3) + 30;
+        DynamicJsonDocument doc(capacity);
+        doc["enabled"] = enabled;
+        JsonArray alarms = doc.createNestedArray("alarms");
+        for (auto const& i: map) {
+            JsonObject alarm = alarms.createNestedObject();
+            tuple<int, int> alarmTime = GetAlarmByDay(i.first);
+            alarm["d"] = i.first;
             alarm["h"] = get<0>(alarmTime);
             alarm["m"] = get<1>(alarmTime);
-            serializeJson(doc, alarmJSON);
         }
+        serializeJsonPretty(doc, alarmJSON);
     }
     return alarmJSON;
 }

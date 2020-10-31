@@ -13,6 +13,7 @@ class AlarmState {
         AlarmState();
         AlarmState(String json);
         String serializeStateToJSON();
+        boolean enabled;
         bool TodayHasAlarm(int day) {
             tuple<int, int> alarm = GetAlarmByDay(day);
             if(get<0>(alarm) > 0 || get<1>(alarm) > 0) return true;
