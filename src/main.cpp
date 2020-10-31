@@ -63,7 +63,6 @@ CRGB warmth[] = {
 //Webserver settings
 WiFiServer server(8181);
 HTTPServer httpServer = HTTPServer(80);
-String header;
 
 void printDigits(int digits) {
     Serial.print(":");
@@ -204,8 +203,7 @@ void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
         int d = value["d"];
         int h = value["h"];
         int m = value["m"];
-        Serial.printf("%d %d %d", d, h, m);
-        Serial.println();
+        Serial.printf("%d %d %d\n", d, h, m);
         alarmState.SetAlarm(d, h, m);
     }
     String alarms = alarmState.serializeStateToJSON();
@@ -234,7 +232,7 @@ boolean tryEnableAlarm() {
     tuple<int, int> alarm = alarmState.GetAlarmByDay(nextAlarmDay);
     wakeup_id = Alarm.alarmRepeat(get<0>(alarm), get<1>(alarm), 0, BeginSunrise);
     if(wakeup_id != dtINVALID_ALARM_ID) {
-        Serial.printf("Alarm set, hour: %d - minute: %d", get<0>(alarm), get<1>(alarm));
+        Serial.printf("Alarm set, hour: %d - minute: %d\n", get<0>(alarm), get<1>(alarm));
         return true;
     }
     return false;
@@ -243,7 +241,7 @@ boolean tryEnableAlarm() {
 void disableAlarm() {
     Serial.println("Disabling Alarm");
     Alarm.free(brightness_id);
-    brightness_id = 0;
+    brightness_id = dtINVALID_ALARM_ID;
     Alarm.free(wakeup_id);
     wakeup_id = dtINVALID_ALARM_ID;
 
@@ -274,9 +272,13 @@ void handleAlarmToggle(HTTPRequest *req, HTTPResponse *resp) {
         resp->setStatusText("Alarm Off");
         alarmState.enabled = false;
     }
-    String alarms = alarmState.serializeStateToJSON();
+    
+    if(alarmState.enabled) {
+        disableAlarm();
+        alarmState.enabled = false;
+    }
 
-    //Save to SPIFFS
+    String alarms = alarmState.serializeStateToJSON();
     int bytes = 0;
     File file = SPIFFS.open("/alarmState.json", "w");
     if (file) {

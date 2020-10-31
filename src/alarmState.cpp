@@ -23,8 +23,7 @@ AlarmState::AlarmState(String json) {
 void AlarmState::SetAlarm(int day, int hour, int minute) {
     it = map.find(day);
     if (it == map.end()) {
-        Serial.printf("No day %d adding new record", day);
-        Serial.println("");
+        Serial.printf("No day %d adding new record\n", day);
         map.insert(std::make_pair(day, std::make_tuple(hour, minute)));
     } else {
         Serial.printf("Editing existing day %d", day);
