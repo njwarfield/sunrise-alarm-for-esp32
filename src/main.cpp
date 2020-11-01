@@ -64,21 +64,6 @@ CRGB warmth[] = {
 WiFiServer server(8181);
 HTTPServer httpServer = HTTPServer(80);
 
-void printDigits(int digits) {
-    Serial.print(":");
-    if (digits < 10)
-        Serial.print('0');
-    Serial.print(digits);
-}
-
-void digitalClockDisplay() {
-    // digital clock display of the time
-    Serial.print(hour());
-    printDigits(minute());
-    printDigits(second());
-    Serial.println();
-}
-
 void IncreaseBrightness() {
     Serial.println("Increasing Brightness and temperature");
     if (brightness < max_brightness) {
@@ -169,7 +154,6 @@ String getAlarmFromSPIFFS() {
 }
 
 void handleRoot(HTTPRequest *req, HTTPResponse *resp) {
-    //TODO: print alarm is enabled state
     resp->setStatusCode(200);
     resp->setHeader("Content-type", "application/json");
     resp->println(alarmState.serializeStateToJSON());
@@ -181,7 +165,6 @@ void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
     byte buffer[capacity];
     req->readBytes(buffer, capacity);
 
-    // If the request is still not read completely, we cannot process it.
     if (!req->requestComplete()) {
         resp->setStatusCode(413);
         resp->setStatusText("Request entity too large");
@@ -197,7 +180,6 @@ void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
         return;
     }
 
-    //TODO: Same as AS constructor, refactor
     JsonArray array = doc["alarms"].as<JsonArray>();
     for (JsonVariant value : array) {
         int d = value["d"];
@@ -272,17 +254,13 @@ void handleAlarmToggle(HTTPRequest *req, HTTPResponse *resp) {
         resp->setStatusText("Alarm Off");
         alarmState.enabled = false;
     }
-    
-    if(alarmState.enabled) {
-        disableAlarm();
-        alarmState.enabled = false;
-    }
 
     String alarms = alarmState.serializeStateToJSON();
     int bytes = 0;
     File file = SPIFFS.open("/alarmState.json", "w");
     if (file) {
         bytes = file.print(alarms);
+        if(bytes == 0) Serial.println("Unable to save alarmState");
         file.close();
     }
 }
@@ -312,7 +290,6 @@ void setup() {
     while (!Serial)
         ;
     GetTimeViaWifi();
-    digitalClockDisplay();
     String alarms = getAlarmFromSPIFFS();
     alarmState = AlarmState(alarms);
     if(alarmState.enabled) {
