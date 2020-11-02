@@ -33,7 +33,7 @@ const char ntpServer[] = NTP_URL;
 const long gmtOffset_sec = TZ_OFFSET;
 
 //DST Offset value is one hour (in seconds)
-const int daylightOffset_sec = 3600;
+const int daylightOffset_sec = DST_OFFSET;
 struct tm timeinfo;
 
 //Alarm Settings
@@ -63,6 +63,23 @@ CRGB warmth[] = {
 //Webserver settings
 WiFiServer server(8181);
 HTTPServer httpServer = HTTPServer(80);
+
+void printDigits(int digits)
+{
+  Serial.print(":");
+  if(digits < 10)
+    Serial.print('0');
+  Serial.print(digits);
+}
+
+void digitalClockDisplay()
+{
+  // digital clock display of the time
+  Serial.print(hour());
+  printDigits(minute());
+  printDigits(second());
+  Serial.println(); 
+}
 
 void IncreaseBrightness() {
     Serial.println("Increasing Brightness and temperature");
@@ -137,6 +154,7 @@ void GetTimeViaWifi() {
     time_t newTime = mktime(&timeinfo);
     setTime(newTime);
     adjustTime(gmtOffset_sec + daylightOffset_sec);
+    digitalClockDisplay();
 }
 
 String getAlarmFromSPIFFS() {

@@ -2,3 +2,5 @@
 #define IOT_WIFI_Password "the password to the wifi connection"
 #define TZ_OFFSET your timezone offset in milliseconds
 #define NTP_URL "pool.ntp.org"
+#define STATE_FILE "/alarmState.json"
+#define DST_OFFSET 0 //3600 when not in DST
