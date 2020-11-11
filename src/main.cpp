@@ -176,7 +176,7 @@ void handleRoot(HTTPRequest *req, HTTPResponse *resp) {
 }
 
 void handleAlarmSet(HTTPRequest *req, HTTPResponse *resp) {
-    const size_t capacity = JSON_ARRAY_SIZE(7) + 7 * JSON_OBJECT_SIZE(3) + 30;
+    const size_t capacity = JSON_ARRAY_SIZE(7) + 7 * JSON_OBJECT_SIZE(3) + 60;
     DynamicJsonDocument doc(capacity);
     byte buffer[capacity];
     req->readBytes(buffer, capacity);

@@ -6,7 +6,7 @@ AlarmState::AlarmState() {
 }
 
 AlarmState::AlarmState(String json) {
-    const size_t capacity = JSON_ARRAY_SIZE(7) + JSON_OBJECT_SIZE(2) + 7*JSON_OBJECT_SIZE(3) + 30;
+    const size_t capacity = JSON_ARRAY_SIZE(7) + JSON_OBJECT_SIZE(2) + 7*JSON_OBJECT_SIZE(3) + 60;
     DynamicJsonDocument doc(capacity);
     deserializeJson(doc, json);
     enabled = doc["enabled"];
@@ -26,7 +26,7 @@ void AlarmState::SetAlarm(int day, int hour, int minute) {
         Serial.printf("No day %d adding new record\n", day);
         map.insert(std::make_pair(day, std::make_tuple(hour, minute)));
     } else {
-        Serial.printf("Editing existing day %d", day);
+        Serial.printf("Editing existing day %d\n", day);
         it->second = std::make_tuple(hour, minute);
     }
 };
