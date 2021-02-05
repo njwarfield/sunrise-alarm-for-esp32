@@ -33,12 +33,8 @@ void AlarmState::SetAlarm(int day, int hour, int minute) {
 
 tuple<int, int> AlarmState::GetAlarmByDay(int day) {
     it = map.find(day);
-    if (it == map.end()) {
-        Serial.printf("Could not find alarm for day %d", day);
-        return std::make_tuple(0, 0);
-    }
-    return it->second;
-};
+    return (it != map.end()) ? it->second : std::make_tuple(0, 0);
+}
 
 String AlarmState::serializeStateToJSON() {
     String alarmJSON;
